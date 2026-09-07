@@ -606,7 +606,15 @@ export const {
                 )
                 infos.sort(compareMessage)
                 const visible = infos
+                // Not a window: `infos` drops messages removed by live events
+                // during hydration, and their stale parts must not be restored
+                // from the response.
+                const visibleIDs = new Set(visible.map((message) => message.id))
                 for (const message of messages.data ?? []) {
+                  if (!visibleIDs.has(message.info.id)) {
+                    delete draft.part[message.info.id]
+                    continue
+                  }
                   const currentParts = draft.part[message.info.id] ?? []
                   const parts = message.parts.flatMap((part) => {
                     const current = currentParts.find((item) => item.id === part.id)

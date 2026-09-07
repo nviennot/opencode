@@ -20,6 +20,9 @@ export function DialogPromptHistory(props: { entries: PromptInfo[]; onSelect: (e
         return {
           title: preview,
           value: index,
+          // The title is a truncated first-line preview, so search the whole
+          // prompt separately or terms past the preview are unfindable.
+          filterText: entry.input.replace(/\s+/g, " ").trim(),
           footer: lineCount > 1 ? `~${lineCount} lines` : undefined,
         }
       })

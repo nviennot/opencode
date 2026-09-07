@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { isDuplicateEntry, MAX_HISTORY_ENTRIES, parsePromptHistory, type PromptInfo } from "../../src/prompt/history"
+import {
+  isDuplicateEntry,
+  MAX_HISTORY_ENTRIES,
+  parsePromptHistory,
+  readPromptHistory,
+  type PromptInfo,
+} from "../../src/prompt/history"
 
 const entry = (input: string, parts: PromptInfo["parts"] = []): PromptInfo => ({ input, parts })
 
@@ -18,6 +24,19 @@ describe("prompt history", () => {
     const result = parsePromptHistory(input)
     expect(result).toHaveLength(MAX_HISTORY_ENTRIES)
     expect(result[0]?.input).toBe("5")
+  })
+
+  test("only asks to rewrite the file when it is corrupt or over the cap", () => {
+    const intact = [entry("one"), entry("two")].map((line) => JSON.stringify(line)).join("\n") + "\n"
+    expect(readPromptHistory(intact).compact).toBe(false)
+    expect(readPromptHistory("").compact).toBe(false)
+
+    expect(readPromptHistory(`${JSON.stringify(entry("one"))}\nnot-json\n`).compact).toBe(true)
+
+    const overCap = Array.from({ length: MAX_HISTORY_ENTRIES + 1 }, (_, index) =>
+      JSON.stringify(entry(String(index))),
+    ).join("\n")
+    expect(readPromptHistory(overCap).compact).toBe(true)
   })
 
   test("dedupes only identical consecutive entries", () => {

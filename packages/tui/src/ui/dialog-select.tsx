@@ -64,6 +64,13 @@ export interface DialogSelectOption<T = any> {
   truncateTitle?: boolean | "left"
   category?: string
   categoryView?: JSX.Element
+  /**
+   * Extra text matched by the filter but never displayed. Use it when `title`
+   * is a shortened preview of a longer value that should stay searchable.
+   * Matched case-insensitively by literal substring, not fuzzily, and ranked
+   * below every fuzzy title/category hit.
+   */
+  filterText?: string
   disabled?: boolean
   bg?: RGBA
   gutter?: () => JSX.Element
@@ -169,7 +176,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       })
       .map((x) => x.obj)
 
-    return result
+    // filterText holds long hidden text whose title is only a preview. It is
+    // matched by literal substring rather than fuzzysort: subsequence matching
+    // over a few hundred characters matches almost any scattered letters, so
+    // fuzzy search there produces far more noise than hits.
+    const matched = new Set(result)
+    const substring = options.filter(
+      (option) => !matched.has(option) && option.filterText?.toLowerCase().includes(needle),
+    )
+
+    return [...result, ...substring]
   })
 
   // When the filter changes due to how TUI works, the mousemove might still be triggered

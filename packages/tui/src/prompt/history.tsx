@@ -24,21 +24,39 @@ export type PromptInfo = {
   )[]
 }
 
-export const MAX_HISTORY_ENTRIES = 50
+export const MAX_HISTORY_ENTRIES = 10000
+
+/**
+ * Rewriting the file costs O(history). Let it overshoot the cap by this much so
+ * the history is compacted once per SLACK appends instead of being reserialized
+ * on every append once it sits at the cap.
+ */
+export const HISTORY_TRIM_SLACK = 500
+
+/**
+ * Parse the history file, reporting whether it needs to be rewritten. Rewriting
+ * is only warranted when the file is corrupt or has grown past the cap; the
+ * steady state is append-only.
+ */
+export function readPromptHistory(text: string): { entries: PromptInfo[]; compact: boolean } {
+  const entries: PromptInfo[] = []
+  let corrupt = false
+  for (const line of text.split("\n")) {
+    if (!line) continue
+    try {
+      entries.push(JSON.parse(line) as PromptInfo)
+    } catch {
+      corrupt = true
+    }
+  }
+  return {
+    entries: entries.slice(-MAX_HISTORY_ENTRIES),
+    compact: corrupt || entries.length > MAX_HISTORY_ENTRIES,
+  }
+}
 
 export function parsePromptHistory(text: string) {
-  return text
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line) as PromptInfo
-      } catch {
-        return undefined
-      }
-    })
-    .filter((line): line is PromptInfo => line !== undefined)
-    .slice(-MAX_HISTORY_ENTRIES)
+  return readPromptHistory(text).entries
 }
 
 export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptInfo): boolean {
@@ -52,12 +70,14 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     const paths = useTuiPaths()
     const historyPath = path.join(paths.state, "prompt-history.jsonl")
     onMount(async () => {
-      const lines = parsePromptHistory(await readText(historyPath).catch(() => ""))
-      setStore("history", lines)
+      const { entries, compact } = readPromptHistory(await readText(historyPath).catch(() => ""))
+      setStore("history", entries)
 
-      // Rewrite valid retained entries to self-heal corruption and enforce the limit.
-      if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+      // Only rewrite when the file is corrupt or over the cap. Reserializing an
+      // intact history on every startup is pure waste once it holds thousands
+      // of entries.
+      if (compact && entries.length > 0)
+        writeText(historyPath, entries.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
     })
 
     const [store, setStore] = createStore({
@@ -95,7 +115,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         setStore(
           produce((draft) => {
             draft.history.push(entry)
-            if (draft.history.length > MAX_HISTORY_ENTRIES) {
+            if (draft.history.length > MAX_HISTORY_ENTRIES + HISTORY_TRIM_SLACK) {
               draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
               trimmed = true
             }

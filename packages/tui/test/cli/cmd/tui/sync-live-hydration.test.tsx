@@ -199,7 +199,7 @@ test("hydration does not clear text streamed before it starts", async () => {
   }
 })
 
-test("live messages merged during hydration retain the 100 message window", async () => {
+test("live messages merged during hydration retain the full history", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
 
@@ -237,10 +237,12 @@ test("live messages merged during hydration retain the 100 message window", asyn
     )
     await hydrate
 
-    expect(sync.data.message[sessionID]).toHaveLength(100)
+    // The transcript is no longer capped, so the hydrated batch and the live
+    // message are all retained and the oldest stays scrollable.
+    expect(sync.data.message[sessionID]).toHaveLength(101)
     expect(sync.data.message[sessionID].at(-1)?.id).toBe(live.id)
-    expect(sync.data.message[sessionID].some((message) => message.id === "msg_000")).toBe(false)
-    expect(sync.data.part.msg_000).toBeUndefined()
+    expect(sync.data.message[sessionID].some((message) => message.id === "msg_000")).toBe(true)
+    expect(sync.data.part.msg_000).toBeDefined()
   } finally {
     app.renderer.destroy()
   }
