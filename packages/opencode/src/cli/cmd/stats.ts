@@ -10,6 +10,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 interface SessionStats {
   totalSessions: number
   totalMessages: number
+  totalPrompts: number
   totalCost: number
   totalTokens: {
     input: number
@@ -44,6 +45,10 @@ interface SessionStats {
   costPerDay: number
   tokensPerSession: number
   medianTokensPerSession: number
+  tokenUsage: Record<
+    "input" | "output" | "cacheRead" | "cacheWrite",
+    Record<"topLevel" | "all", { total: number; average: number; median: number }>
+  >
 }
 
 export const StatsCommand = effectCmd({
@@ -85,7 +90,7 @@ const getAllSessions = Effect.fnUntraced(function* () {
   return (yield* db.select().from(SessionTable).all().pipe(Effect.orDie)).map((row) => Session.fromRow(row))
 })
 
-const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
+export const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
   days?: number,
   projectFilter?: string,
   currentProject?: Project.Info,
@@ -121,9 +126,11 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     }
   }
 
+  const topLevelSessions = filteredSessions.filter((session) => !session.parentID)
   const stats: SessionStats = {
     totalSessions: filteredSessions.length,
     totalMessages: 0,
+    totalPrompts: 0,
     totalCost: 0,
     totalTokens: {
       input: 0,
@@ -144,6 +151,28 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     costPerDay: 0,
     tokensPerSession: 0,
     medianTokensPerSession: 0,
+    tokenUsage: {
+      input: {
+        topLevel: summarizeTokens(topLevelSessions.map((session) => session.tokens?.input ?? 0)),
+        all: summarizeTokens(filteredSessions.map((session) => session.tokens?.input ?? 0)),
+      },
+      output: {
+        topLevel: summarizeTokens(
+          topLevelSessions.map((session) => (session.tokens?.output ?? 0) + (session.tokens?.reasoning ?? 0)),
+        ),
+        all: summarizeTokens(
+          filteredSessions.map((session) => (session.tokens?.output ?? 0) + (session.tokens?.reasoning ?? 0)),
+        ),
+      },
+      cacheRead: {
+        topLevel: summarizeTokens(topLevelSessions.map((session) => session.tokens?.cache.read ?? 0)),
+        all: summarizeTokens(filteredSessions.map((session) => session.tokens?.cache.read ?? 0)),
+      },
+      cacheWrite: {
+        topLevel: summarizeTokens(topLevelSessions.map((session) => session.tokens?.cache.write ?? 0)),
+        all: summarizeTokens(filteredSessions.map((session) => session.tokens?.cache.write ?? 0)),
+      },
+    },
   }
 
   if (filteredSessions.length > 1000) {
@@ -211,6 +240,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
 
         return {
           messageCount: messages.length,
+          promptCount: session.parentID ? 0 : messages.filter((message) => message.info.role === "user").length,
           sessionCost,
           sessionTokens,
           sessionTotalTokens:
@@ -234,6 +264,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     sessionTotalTokens.push(result.sessionTotalTokens)
 
     stats.totalMessages += result.messageCount
+    stats.totalPrompts += result.promptCount
     stats.totalCost += result.sessionCost
     stats.totalTokens.input += result.sessionTokens.input
     stats.totalTokens.output += result.sessionTokens.output
@@ -305,6 +336,7 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   console.log("├────────────────────────────────────────────────────────┤")
   console.log(renderRow("Sessions", stats.totalSessions.toLocaleString()))
   console.log(renderRow("Messages", stats.totalMessages.toLocaleString()))
+  console.log(renderRow("Prompts", stats.totalPrompts.toLocaleString()))
   console.log(renderRow("Days", stats.days.toString()))
   console.log("└────────────────────────────────────────────────────────┘")
   console.log()
@@ -318,13 +350,58 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   const tokensPerSession = isNaN(stats.tokensPerSession) ? 0 : stats.tokensPerSession
   console.log(renderRow("Total Cost", `$${cost.toFixed(2)}`))
   console.log(renderRow("Avg Cost/Day", `$${costPerDay.toFixed(2)}`))
+  console.log(
+    renderRow(
+      "Total Tokens",
+      formatNumber(
+        stats.totalTokens.input +
+          stats.totalTokens.output +
+          stats.totalTokens.reasoning +
+          stats.totalTokens.cache.read +
+          stats.totalTokens.cache.write,
+      ),
+    ),
+  )
   console.log(renderRow("Avg Tokens/Session", formatNumber(Math.round(tokensPerSession))))
   const medianTokensPerSession = isNaN(stats.medianTokensPerSession) ? 0 : stats.medianTokensPerSession
   console.log(renderRow("Median Tokens/Session", formatNumber(Math.round(medianTokensPerSession))))
   console.log(renderRow("Input", formatNumber(stats.totalTokens.input)))
-  console.log(renderRow("Output", formatNumber(stats.totalTokens.output)))
+  console.log(renderRow("Output", formatNumber(stats.totalTokens.output + stats.totalTokens.reasoning)))
   console.log(renderRow("Cache Read", formatNumber(stats.totalTokens.cache.read)))
   console.log(renderRow("Cache Write", formatNumber(stats.totalTokens.cache.write)))
+  console.log("└────────────────────────────────────────────────────────┘")
+  console.log()
+
+  console.log("┌────────────────────────────────────────────────────────┐")
+  console.log("│                 INPUT & OUTPUT TOKENS                  │")
+  console.log("├────────────────────────────────────────────────────────┤")
+  console.log(renderRow("", `${"Top-Level Only".padStart(15)}${"Incl. Subagents".padStart(19)}`))
+  for (const [label, category, metric] of [
+    ["Total Input Tokens", "input", "total"],
+    ["Total Output Tokens", "output", "total"],
+    ["Total Cache Read", "cacheRead", "total"],
+    ["Total Cache Write", "cacheWrite", "total"],
+    ["Avg Input/Session", "input", "average"],
+    ["Avg Output/Session", "output", "average"],
+    ["Avg Cache Read", "cacheRead", "average"],
+    ["Avg Cache Write", "cacheWrite", "average"],
+    ["Median Input/Session", "input", "median"],
+    ["Median Output/Session", "output", "median"],
+    ["Median Cache Read", "cacheRead", "median"],
+    ["Median Cache Write", "cacheWrite", "median"],
+  ] as const) {
+    console.log(
+      renderRow(
+        label,
+        formatNumber(Math.round(stats.tokenUsage[category].topLevel[metric])).padStart(15) +
+          formatNumber(Math.round(stats.tokenUsage[category].all[metric])).padStart(19),
+      ),
+    )
+  }
+  console.log("├────────────────────────────────────────────────────────┤")
+  console.log(renderRow("Input is non-cached; cache is shown separately.", ""))
+  console.log(renderRow("Output includes reasoning.", ""))
+  console.log(renderRow("Averages and medians are per session.", ""))
   console.log("└────────────────────────────────────────────────────────┘")
   console.log()
 
@@ -381,6 +458,17 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
     console.log("└────────────────────────────────────────────────────────┘")
   }
   console.log()
+}
+
+function summarizeTokens(values: number[]) {
+  const total = values.reduce((sum, value) => sum + value, 0)
+  values.sort((a, b) => a - b)
+  const mid = Math.floor(values.length / 2)
+  return {
+    total,
+    average: values.length === 0 ? 0 : total / values.length,
+    median: values.length === 0 ? 0 : values.length % 2 === 0 ? (values[mid - 1] + values[mid]) / 2 : values[mid],
+  }
 }
 
 function formatNumber(num: number): string {
