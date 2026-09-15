@@ -7,6 +7,7 @@ import { useTheme, selectedForeground } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
+import { DiffView } from "../../component/diff"
 import { useSync } from "../../context/sync"
 import { useProject } from "../../context/project"
 import { filetype } from "../../util/filetype"
@@ -57,7 +58,8 @@ function EditBody(props: { request: PermissionRequest }) {
             },
           }}
         >
-          <diff
+          <DiffView
+            separatorColor={theme.border}
             diff={diff()}
             view={view()}
             filetype={ft()}

@@ -5,7 +5,7 @@ import {
   TextAttributes,
   type BorderSides,
   type BoxRenderable,
-  type DiffRenderable,
+  DiffRenderable,
   type ScrollBoxRenderable,
 } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
@@ -15,6 +15,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { DiffViewerFileTree } from "./diff-viewer-file-tree"
+import { DiffView } from "../../component/diff"
 import { Panel, PanelGroup, Separator } from "./diff-viewer-ui"
 import { DialogSelect } from "../../ui/dialog-select"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -168,7 +169,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   const helpShortcut = useCommandShortcut("diff.help")
   let scroll: ScrollBoxRenderable | undefined
   const patchNodeByFileIndex = new Map<number, BoxRenderable>()
-  const diffNodeByFileIndex = new Map<number, DiffRenderable>()
+  const diffNodeByFileIndex = new Map<number, BoxRenderable>()
   const [selectedHunk, setSelectedHunk] = createSignal<SelectedHunk | undefined>()
   const [pendingPatchScrollFileIndex, setPendingPatchScrollFileIndex] = createSignal<number | undefined>()
   const [patchFillerHeight, setPatchFillerHeight] = createSignal(0)
@@ -286,14 +287,14 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       .flatMap((entry) => {
         const node = diffNodeByFileIndex.get(entry.fileIndex)
         if (!node || node.isDestroyed) return []
-        const contentY = patchScroll.scrollTop + node.y - patchScroll.viewport.y
-        return node.diff
-          .split("\n")
-          .flatMap((line, row) => (line.startsWith("@@") ? [row] : []))
-          .map((row, hunkIndex) => ({
+        return node
+          .getChildren()
+          .filter((child): child is DiffRenderable => child instanceof DiffRenderable)
+          .filter((child) => child.getHunkRowOffsets().length > 0)
+          .map((child, hunkIndex) => ({
             fileIndex: entry.fileIndex,
             hunkIndex,
-            contentY: contentY + row,
+            contentY: patchScroll.scrollTop + child.y - patchScroll.viewport.y,
           }))
       })
       .sort((left, right) => left.contentY - right.contentY)
@@ -840,8 +841,9 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                             >
                               {(patch) => (
                                 <box border={patchLeftBorder()} borderColor={theme().border}>
-                                  <diff
-                                    ref={(element: DiffRenderable) => diffNodeByFileIndex.set(entry.fileIndex, element)}
+                                  <DiffView
+                                    ref={(element: BoxRenderable) => diffNodeByFileIndex.set(entry.fileIndex, element)}
+                                    separatorColor={theme().border}
                                     diff={patch()}
                                     view={view()}
                                     filetype={reviewed() ? PLAIN_TEXT_FILETYPE : filetype(entry.file.file)}

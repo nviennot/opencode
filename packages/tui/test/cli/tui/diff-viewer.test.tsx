@@ -32,7 +32,7 @@ test("closing the diff viewer returns to the route it opened from", async () => 
   }
 })
 
-test("brackets navigate diff hunks", async () => {
+test.each([false, true])("brackets navigate rendered diff hunks (wrapped: %s)", async (wrapped) => {
   const viewer = await renderDiffViewer(
     [
       {
@@ -43,7 +43,7 @@ test("brackets navigate diff hunks", async () => {
         patch: `--- a/src/file.ts
 +++ b/src/file.ts
 @@ -1,3 +1,3 @@
- const first = true
+ const first = ${wrapped ? `"${"x".repeat(90)}"` : "true"}
 -const oldFirst = true
 +const newFirst = true
  const afterFirst = true
@@ -75,11 +75,13 @@ test("brackets navigate diff hunks", async () => {
     await viewer.app.renderOnce()
     const first = scroll.scrollTop
     expect(first).toBeGreaterThan(initial)
+    expect(viewer.app.captureCharFrame().split("\n")[scroll.viewport.y]).toContain("const first")
 
     viewer.commands.get("diff.next_hunk")!.run?.({} as never)
     await viewer.app.renderOnce()
     const second = scroll.scrollTop
     expect(second).toBeGreaterThan(first)
+    expect(viewer.app.captureCharFrame().split("\n")[scroll.viewport.y]).toContain("const second")
 
     viewer.commands.get("diff.previous_hunk")!.run?.({} as never)
     await viewer.app.renderOnce()

@@ -23,6 +23,7 @@ import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
+import { DiffView } from "../../component/diff"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -2408,7 +2409,8 @@ function Edit(props: ToolProps) {
       <Match when={stringValue(props.metadata.diff) !== undefined}>
         <BlockTool title={"← Edit " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
           <box paddingLeft={1}>
-            <diff
+            <DiffView
+              separatorColor={theme.border}
               diff={diffContent()}
               view={view()}
               filetype={ft()}
@@ -2456,7 +2458,8 @@ function ApplyPatch(props: ToolProps) {
   function Diff(p: { diff: string; filePath: string }) {
     return (
       <box paddingLeft={1}>
-        <diff
+        <DiffView
+          separatorColor={theme.border}
           diff={p.diff}
           view={view()}
           filetype={filetype(p.filePath)}
