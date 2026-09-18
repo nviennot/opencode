@@ -35,6 +35,7 @@ export function DialogPromptHistory(props: { entries: PromptInfo[]; onSelect: (e
       title="History"
       placeholder="Search prompt history"
       options={options()}
+      preserveOrder
       onSelect={(option) => {
         const entry = props.entries[option.value]
         if (entry) props.onSelect(entry)

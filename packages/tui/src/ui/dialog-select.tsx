@@ -33,6 +33,7 @@ export interface DialogSelectProps<T> {
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
+  preserveOrder?: boolean
   renderFilter?: boolean
   locked?: boolean
   preserveSelection?: boolean
@@ -68,7 +69,7 @@ export interface DialogSelectOption<T = any> {
    * Extra text matched by the filter but never displayed. Use it when `title`
    * is a shortened preview of a longer value that should stay searchable.
    * Matched case-insensitively by literal substring, not fuzzily, and ranked
-   * below every fuzzy title/category hit.
+   * below every fuzzy title/category hit unless preserveOrder is enabled.
    */
   filterText?: string
   disabled?: boolean
@@ -181,6 +182,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     // over a few hundred characters matches almost any scattered letters, so
     // fuzzy search there produces far more noise than hits.
     const matched = new Set(result)
+    if (props.preserveOrder)
+      return options.filter((option) => matched.has(option) || option.filterText?.toLowerCase().includes(needle))
+
     const substring = options.filter(
       (option) => !matched.has(option) && option.filterText?.toLowerCase().includes(needle),
     )
