@@ -870,6 +870,98 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
   ),
 )
 
+it.live("session.processor streams partial patch input before executing the tool", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const gate = defer<void>()
+        const { processors, session, provider } = yield* boot()
+        const patchText = "*** Begin Patch\n*** Add File: test.txt\n+hello\n*** End Patch"
+        const input = JSON.stringify({ patchText })
+        const chunks = [input.slice(0, 25), input.slice(25, -2)]
+        yield* llm.push(
+          raw({
+            head: chunks.map((arguments_, index) => ({
+              id: "chatcmpl-test",
+              object: "chat.completion.chunk",
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        ...(index === 0 ? { id: "call_patch", type: "function" } : {}),
+                        function: { ...(index === 0 ? { name: "apply_patch" } : {}), arguments: arguments_ },
+                      },
+                    ],
+                  },
+                },
+              ],
+            })),
+            wait: gate.promise,
+            tail: [
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: input.slice(-2) } }] } }],
+              },
+              {
+                id: "chatcmpl-test",
+                object: "chat.completion.chunk",
+                choices: [{ delta: {}, finish_reason: "tool_calls" }],
+              },
+            ],
+          }),
+        )
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "patch")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+        const run = yield* handle
+          .process({
+            user: parent,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "patch" }],
+            tools: {
+              apply_patch: tool({
+                description: "Apply a patch",
+                inputSchema: z.object({ patchText: z.string() }),
+                execute: async () => ({ title: "Patch", output: "Patched", metadata: {} }),
+              }),
+            },
+          })
+          .pipe(Effect.forkChild)
+
+        const pending = yield* waitFor(
+          MessageV2.parts(msg.id).pipe(
+            Effect.map((parts) =>
+              parts.find(
+                (part) => part.type === "tool" && part.state.status === "pending" && part.state.raw === chunks.join(""),
+              ),
+            ),
+            Effect.provideService(Database.Service, database),
+          ),
+          "timed out waiting for partial patch input",
+        )
+        expect(pending).toMatchObject({
+          tool: "apply_patch",
+          state: { status: "pending", input: {}, raw: input.slice(0, -2) },
+        })
+        gate.resolve()
+        yield* Fiber.join(run)
+        expect((yield* MessageV2.parts(msg.id)).find((part) => part.type === "tool")).toMatchObject({
+          state: { status: "completed", input: { patchText }, output: "Patched" },
+        })
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests mark pending tools as aborted on cleanup", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>

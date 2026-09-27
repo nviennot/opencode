@@ -24,6 +24,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { DiffView } from "../../component/diff"
+import { PatchPreview, streamingPatch } from "../../component/patch-preview"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -2448,6 +2449,11 @@ function ApplyPatch(props: ToolProps) {
   const pathFormatter = usePathFormatter()
 
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
+  const patch = createMemo(() => {
+    if (props.part.state.status === "pending") return streamingPatch(props.part.state.raw)
+    if (props.part.state.status === "running") return stringValue(props.input.patchText) ?? ""
+    return ""
+  })
 
   const view = createMemo(() => {
     const diffStyle = ctx.tui.diff_style
@@ -2511,9 +2517,18 @@ function ApplyPatch(props: ToolProps) {
         </For>
       </Match>
       <Match when={true}>
-        <InlineTool icon="%" pending="Preparing patch…" failure="Patch failed" complete={false} part={props.part}>
-          Patch
-        </InlineTool>
+        <Show
+          when={patch()}
+          fallback={
+            <InlineTool icon="%" pending="Preparing patch…" failure="Patch failed" complete={false} part={props.part}>
+              Patch
+            </InlineTool>
+          }
+        >
+          <BlockTool title="Preparing patch…" spinner part={props.part}>
+            <PatchPreview text={patch()} colors={theme} />
+          </BlockTool>
+        </Show>
       </Match>
     </Switch>
   )

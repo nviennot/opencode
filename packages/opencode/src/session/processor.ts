@@ -319,9 +319,15 @@ const layer = Layer.effect(
             yield* ensureToolCall(value)
             return
 
-          case "tool-input-delta":
-            yield* ensureToolCall(value)
+          case "tool-input-delta": {
+            const match = yield* ensureToolCall(value)
+            if (match.part.state.status !== "pending" || !value.text) return
+            yield* session.updatePart({
+              ...match.part,
+              state: { ...match.part.state, raw: match.part.state.raw + value.text },
+            })
             return
+          }
 
           case "tool-input-end": {
             yield* ensureToolCall(value)
