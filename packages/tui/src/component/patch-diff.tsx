@@ -77,10 +77,11 @@ export function PatchDiff(props: Props) {
           {(hunk, index) => (
             <>
               <Show when={index() > 0}>
-                <box width="100%" height={1} backgroundColor={local.lineNumberBg}>
+                <box width="100%" height={1} backgroundColor={local.lineNumberBg} flexDirection="row">
                   <text fg={local.hunkFg} bg={local.lineNumberBg}>
                     {` ${hunk.header ?? ""}`}
                   </text>
+                  <box flexGrow={1} height={1} border={["top"]} borderColor={local.hunkFg} />
                 </box>
               </Show>
               <diff
