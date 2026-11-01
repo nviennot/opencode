@@ -48,6 +48,19 @@ export const Tools = Schema.Union([
 ]).annotate({ identifier: "SessionStats.Tools" })
 export type Tools = typeof Tools.Type
 
+export const TokenSummary = Schema.Struct({
+  total: Schema.Finite,
+  average: Schema.Finite,
+  median: Schema.Finite,
+}).annotate({ identifier: "SessionStats.TokenSummary" })
+export interface TokenSummary extends Schema.Schema.Type<typeof TokenSummary> {}
+
+export const TokenUsageSummary = Schema.Record(
+  Schema.Literals(["input", "output", "cacheRead", "cacheWrite", "total"]),
+  Schema.Struct({ topLevel: TokenSummary, all: TokenSummary }),
+).annotate({ identifier: "SessionStats.TokenUsageSummary" })
+export type TokenUsageSummary = typeof TokenUsageSummary.Type
+
 export const Info = Schema.Struct({
   range: Schema.Struct({
     from: DateTimeUtcFromMillis,
@@ -58,6 +71,7 @@ export const Info = Schema.Struct({
   prompts: NonNegativeInt,
   steps: NonNegativeInt,
   tokens: TokenUsage.Info,
+  tokenUsage: TokenUsageSummary.pipe(optional),
   cost: Money.USD,
   tools: Tools,
   activeDays: NonNegativeInt,

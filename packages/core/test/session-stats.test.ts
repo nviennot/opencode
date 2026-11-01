@@ -200,11 +200,33 @@ describe("SessionStats", () => {
         tools: "detail",
       })
 
-      expect(stats.sessions).toBe(2)
+      expect(stats.sessions).toBe(3)
       expect(stats.subagents).toBe(1)
       expect(stats.prompts).toBe(1)
       expect(stats.steps).toBe(3)
       expect(stats.tokens).toEqual({ input: 42, output: 22, reasoning: 10, cache: { read: 18, write: 6 } })
+      expect(stats.tokenUsage).toEqual({
+        input: {
+          topLevel: { total: 22, average: 22 / 3, median: 10 },
+          all: { total: 42, average: 10.5, median: 10 },
+        },
+        output: {
+          topLevel: { total: 18, average: 6, median: 7 },
+          all: { total: 32, average: 8, median: 7 },
+        },
+        cacheRead: {
+          topLevel: { total: 10, average: 10 / 3, median: 4 },
+          all: { total: 18, average: 4.5, median: 4 },
+        },
+        cacheWrite: {
+          topLevel: { total: 4, average: 4 / 3, median: 1 },
+          all: { total: 6, average: 1.5, median: 1.5 },
+        },
+        total: {
+          topLevel: { total: 54, average: 18, median: 22 },
+          all: { total: 98, average: 24.5, median: 22 },
+        },
+      })
       expect(stats.cost).toBe(Money.USD.make(6.25))
       expect(stats.tools).toMatchObject({
         mode: "detail",
@@ -246,6 +268,21 @@ describe("SessionStats", () => {
 
       const project = yield* SessionStats.get({ projectID, timezone: "UTC", tools: "none" })
       expect(DateTime.toEpochMillis(project.range.from)).toBe(Date.UTC(2025, 11, 30, 10))
+      const filtered = yield* SessionStats.get({
+        projectID,
+        from: Date.UTC(2026, 0, 3),
+        to: Date.UTC(2026, 0, 4),
+        tools: "none",
+      })
+      expect(filtered.tokenUsage.input).toEqual({
+        topLevel: { total: 0, average: 0, median: 0 },
+        all: { total: 20, average: 20, median: 20 },
+      })
+      const other = yield* SessionStats.get({ projectID: otherProjectID, tools: "none" })
+      expect(other.tokenUsage.input).toEqual({
+        topLevel: { total: 10, average: 10, median: 10 },
+        all: { total: 10, average: 10, median: 10 },
+      })
 
       const error = yield* Effect.flip(
         SessionStats.get({ from: Date.UTC(2026, 1, 1), to: Date.UTC(2026, 0, 1), tools: "none" }),
@@ -395,6 +432,18 @@ describe("SessionStats", () => {
         cache: { read: 120 * 4, write: 120 },
       })
       expect(stats.cost).toBe(Money.USD.make(120 * 1.5 + 1))
+    }),
+  )
+
+  it.effect("returns finite zero token summaries without activity", () =>
+    Effect.gen(function* () {
+      const stats = yield* SessionStats.get({ from: 0, to: 1, tools: "none" })
+      Object.values(stats.tokenUsage).forEach((usage) => {
+        expect(usage).toEqual({
+          topLevel: { total: 0, average: 0, median: 0 },
+          all: { total: 0, average: 0, median: 0 },
+        })
+      })
     }),
   )
 })

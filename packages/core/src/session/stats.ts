@@ -103,6 +103,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   const toolMode = input.tools ?? "summary"
   const sessions = new Set<string>()
   const subagents = new Set<string>()
+  const sessionTokens = new Map<string, Tokens>()
   const activity = new Map<string, number>()
   const models = new Map<string, ModelAggregate>()
   const tools = new Map<string, ToolAggregate>()
@@ -151,6 +152,8 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
               rows.forEach((row) => {
                 if (row.parentID === null) sessions.add(row.sessionID)
                 else subagents.add(row.sessionID)
+                const usage = sessionTokens.get(row.sessionID) ?? emptyTokens()
+                sessionTokens.set(row.sessionID, usage)
                 if (row.type === "user") {
                   if (row.parentID === null) totals.prompts++
                   return
@@ -158,6 +161,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
 
                 totals.steps++
                 const tokens = rowTokens(row)
+                addTokens(usage, tokens)
                 addTokens(totals.tokens, tokens)
                 totals.cost += row.cost ?? 0
                 const day = dateKey(row.timeCreated)
@@ -307,7 +311,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     )
 
   const ids = yield* db
-    .select({ id: SessionTable.id })
+    .select({ id: SessionTable.id, parentID: SessionTable.parent_id })
     .from(SessionTable)
     .where(input.projectID === undefined ? undefined : eq(SessionTable.project_id, input.projectID))
     .all()
@@ -320,7 +324,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     ),
     (batch) =>
       db
-        .select({ data: EventTable.data })
+        .select({ sessionID: EventTable.aggregate_id, data: EventTable.data })
         .from(EventTable)
         .where(
           and(
@@ -338,9 +342,15 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
         .pipe(Effect.orDie),
     { concurrency: 4 },
   )).flat()
+  const parents = new Map(ids.map((row) => [String(row.id), row.parentID]))
   events.forEach((row) => {
     const decoded = decodeUsage(row.data)
     if (Option.isNone(decoded)) return
+    if (parents.get(row.sessionID) == null) sessions.add(row.sessionID)
+    else subagents.add(row.sessionID)
+    const usage = sessionTokens.get(row.sessionID) ?? emptyTokens()
+    sessionTokens.set(row.sessionID, usage)
+    addTokens(usage, decoded.value.tokens)
     addTokens(totals.tokens, decoded.value.tokens)
     totals.cost += decoded.value.cost
   })
@@ -353,6 +363,13 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
     prompts: totals.prompts,
     steps: totals.steps,
     tokens: totals.tokens,
+    tokenUsage: {
+      input: summarizeTokens(sessionTokens, sessions, (tokens) => tokens.input),
+      output: summarizeTokens(sessionTokens, sessions, (tokens) => tokens.output + tokens.reasoning),
+      cacheRead: summarizeTokens(sessionTokens, sessions, (tokens) => tokens.cache.read),
+      cacheWrite: summarizeTokens(sessionTokens, sessions, (tokens) => tokens.cache.write),
+      total: summarizeTokens(sessionTokens, sessions, TokenUsage.total),
+    },
     cost: Money.USD.make(totals.cost),
     tools:
       toolMode === "none"
@@ -387,6 +404,18 @@ function windows(from: number, to: number) {
     from: from + index * Window,
     to: Math.min(to, from + (index + 1) * Window),
   }))
+}
+
+function summarizeTokens(usage: Map<string, Tokens>, topLevel: Set<string>, value: (tokens: Tokens) => number) {
+  const entries = [...usage.entries()]
+  const summarize = (values: number[]) => {
+    const total = values.reduce((sum, value) => sum + value, 0)
+    return { total, average: values.length === 0 ? 0 : total / values.length, median: median(values) ?? 0 }
+  }
+  return {
+    topLevel: summarize(entries.filter(([id]) => topLevel.has(id)).map(([, tokens]) => value(tokens))),
+    all: summarize(entries.map(([, tokens]) => value(tokens))),
+  }
 }
 
 function rowTokens(row: MessageRow): Tokens {

@@ -139,6 +139,8 @@ export type FormExternalField = { key: string; type: "external"; url: string; ti
 
 export type FormValue = string | number | "Infinity" | "-Infinity" | "NaN" | boolean | Array<string>
 
+export type SessionStatsTokenSummary = { total: number; average: number; median: number }
+
 export type SessionStatsToolTotals = { calls: number; succeeded: number; failed: number; unfinished: number }
 
 export type SessionStatsToolUsage = {
@@ -662,6 +664,14 @@ export type FormMultiselectField = {
 }
 
 export type FormAnswer = { [x: string]: FormValue }
+
+export type SessionStatsTokenUsageSummary = {
+  input: { topLevel: SessionStatsTokenSummary; all: SessionStatsTokenSummary }
+  output: { topLevel: SessionStatsTokenSummary; all: SessionStatsTokenSummary }
+  cacheRead: { topLevel: SessionStatsTokenSummary; all: SessionStatsTokenSummary }
+  cacheWrite: { topLevel: SessionStatsTokenSummary; all: SessionStatsTokenSummary }
+  total: { topLevel: SessionStatsTokenSummary; all: SessionStatsTokenSummary }
+}
 
 export type SessionStatsTools =
   | { mode: "none" }
@@ -2263,6 +2273,7 @@ export type SessionStatsInfo = {
   prompts: number
   steps: number
   tokens: TokenUsageInfo
+  tokenUsage?: SessionStatsTokenUsageSummary
   cost: MoneyUSD
   tools: SessionStatsTools
   activeDays: number

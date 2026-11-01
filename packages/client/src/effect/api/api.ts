@@ -504,6 +504,30 @@ export type ExperimentalSessionStatsOutput = {
     readonly reasoning: number
     readonly cache: { readonly read: number; readonly write: number }
   }
+  readonly tokenUsage?:
+    | {
+        readonly input: {
+          readonly topLevel: { readonly total: number; readonly average: number; readonly median: number }
+          readonly all: { readonly total: number; readonly average: number; readonly median: number }
+        }
+        readonly output: {
+          readonly topLevel: { readonly total: number; readonly average: number; readonly median: number }
+          readonly all: { readonly total: number; readonly average: number; readonly median: number }
+        }
+        readonly cacheRead: {
+          readonly topLevel: { readonly total: number; readonly average: number; readonly median: number }
+          readonly all: { readonly total: number; readonly average: number; readonly median: number }
+        }
+        readonly cacheWrite: {
+          readonly topLevel: { readonly total: number; readonly average: number; readonly median: number }
+          readonly all: { readonly total: number; readonly average: number; readonly median: number }
+        }
+        readonly total: {
+          readonly topLevel: { readonly total: number; readonly average: number; readonly median: number }
+          readonly all: { readonly total: number; readonly average: number; readonly median: number }
+        }
+      }
+    | undefined
   readonly cost: Money.USD
   readonly tools:
     | { readonly mode: "none" }

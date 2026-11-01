@@ -99,6 +99,39 @@ describe("stats rendering", () => {
     expect(output).toContain("+1 more tool")
   })
 
+  test.each([48, 80])("renders top-level and subagent token summaries at %i columns", (width) => {
+    const usage = {
+      topLevel: { total: 1234, average: 12.4, median: 4.5 },
+      all: { total: 2345, average: 23.6, median: 8.4 },
+    }
+    const output = renderStats(
+      {
+        ...stats,
+        tokenUsage: { input: usage, output: usage, cacheRead: usage, cacheWrite: usage, total: usage },
+      },
+      options({ cost: true, width }),
+    )
+    expect(output).toMatch(/total tokens\s+18.5k/)
+    expect(output).toContain("TOKENS PER SESSION")
+    expect(output).toContain("total input")
+    expect(output).toContain("average output")
+    expect(output).toContain("median cache read")
+    expect(output).toContain("median cache write")
+    expect(output).toContain("median all tokens")
+    expect(output).toContain("Input excludes cache; output includes reasoning.")
+    expect(output).toContain("Averages and medians are per active session.")
+    if (width < 68) {
+      expect(output).toContain("top-level 1.2k · all 2.3k")
+      expect(output).toContain("top-level 5 · all 8")
+      expect(output.split(/\r?\n/).every((line) => line.length <= width)).toBe(true)
+      return
+    }
+    expect(output).toMatch(/Top-Level Only\s+Incl. Subagents/)
+    expect(output).toMatch(/total input\s+1.2k\s+2.3k/)
+    expect(output).toMatch(/average input\s+12\s+24/)
+    expect(output).toMatch(/median input\s+5\s+8/)
+  })
+
   test("uses the OpenCode palette in color mode", () => {
     const output = renderStats(stats, options({ color: true }))
     expect(output).toContain("\x1b[1;36m")

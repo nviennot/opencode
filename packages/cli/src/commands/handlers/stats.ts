@@ -131,7 +131,7 @@ export function renderStats(stats: SessionStatsInfo, options: RenderOptions) {
           style("opencode.ai", "2", options.color),
         ]
 
-  if (options.cost) lines.push(...(lines.length > 0 ? [""] : []), ...renderCost(stats))
+  if (options.cost) lines.push(...(lines.length > 0 ? [""] : []), ...renderCost(stats, options.width))
   if (options.models)
     lines.push(...(lines.length > 0 ? [""] : []), ...renderModels(stats, options.limit, options.width))
   if (options.tools) lines.push(...(lines.length > 0 ? [""] : []), ...renderTools(stats, options.limit, options.width))
@@ -190,18 +190,47 @@ function renderActivity(
   ]
 }
 
-function renderCost(stats: SessionStatsInfo) {
+function renderCost(stats: SessionStatsInfo, width: number) {
   const input = stats.tokens.input + stats.tokens.cache.read + stats.tokens.cache.write
   const cached = input === 0 ? 0 : (stats.tokens.cache.read / input) * 100
   return [
     "COST & TOKENS",
     row("cost", `$${stats.cost.toFixed(2)}`),
+    row("total tokens", formatNumber(TokenUsage.total(stats.tokens))),
     row("input", formatNumber(stats.tokens.input)),
     row("output", formatNumber(stats.tokens.output)),
     row("reasoning", formatNumber(stats.tokens.reasoning)),
     row("cache read", formatNumber(stats.tokens.cache.read)),
     row("cache write", formatNumber(stats.tokens.cache.write)),
     row("cached input", formatPercent(cached)),
+    ...renderTokenUsage(stats, width),
+  ]
+}
+
+function renderTokenUsage(stats: SessionStatsInfo, width: number) {
+  if (!stats.tokenUsage) return []
+  const categories = [
+    ["input", stats.tokenUsage.input],
+    ["output", stats.tokenUsage.output],
+    ["cache read", stats.tokenUsage.cacheRead],
+    ["cache write", stats.tokenUsage.cacheWrite],
+    ["all tokens", stats.tokenUsage.total],
+  ] as const
+  return [
+    "",
+    "TOKENS PER SESSION",
+    ...(width < 68 ? [] : ["  metric".padEnd(28) + "Top-Level Only".padStart(16) + "Incl. Subagents".padStart(18)]),
+    ...(["total", "average", "median"] as const).flatMap((metric) =>
+      categories.flatMap(([label, usage]) => {
+        const top = formatNumber(usage.topLevel[metric])
+        const all = formatNumber(usage.all[metric])
+        if (width < 68) return [`  ${metric} ${label}`, `    top-level ${top} · all ${all}`]
+        return [`  ${`${metric} ${label}`.padEnd(26)}${top.padStart(16)}${all.padStart(18)}`]
+      }),
+    ),
+    "",
+    "Input excludes cache; output includes reasoning.",
+    "Averages and medians are per active session.",
   ]
 }
 
