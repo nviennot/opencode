@@ -138,7 +138,7 @@ function UpdateNotification(props: { width: number }) {
       {(state) => {
         const remote = state.source === "server" && state.remote
         return (
-          <Show when={!remote || state.type === "available"}>
+          <Show when={state.type === (remote ? "available" : "installed")}>
             <box
               flexShrink={0}
               flexDirection="row"
@@ -151,21 +151,14 @@ function UpdateNotification(props: { width: number }) {
               onMouseOut={() => setHovered(false)}
               onMouseUp={() => {
                 if (remote) return update.dismiss()
-                if (state.type === "installed") return exit()
-                update.open?.("notification")
+                exit()
               }}
             >
               <FadeInText fg={theme.text.muted} backdrop={backdrop()}>
                 <Show when={!remote}>
-                  <span style={{ fg: theme.text.action.primary.selected }}>
-                    {state.type === "installed" ? "/exit" : "/update"}
-                  </span>
+                  <span style={{ fg: theme.text.action.primary.selected }}>/exit</span>
                 </Show>
-                {remote
-                  ? "remote server update available"
-                  : state.type === "installed"
-                    ? ` restart to use v${state.version}`
-                    : ` to install v${state.version}`}
+                {remote ? "remote server update available" : ` restart to use v${state.version}`}
               </FadeInText>
             </box>
           </Show>
