@@ -4,7 +4,7 @@ import { Cache, Context, Duration, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { randomBytes } from "node:crypto"
 
-const TTL = Duration.minutes(5)
+const TTL = Duration.days(365)
 
 export interface Interface {
   readonly issue: () => Effect.Effect<{ readonly code: string; readonly expires_in: number }>

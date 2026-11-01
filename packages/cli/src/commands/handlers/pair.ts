@@ -28,13 +28,14 @@ export default Runtime.handler(
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const urls = yield* pairingURLs(client, input)
     const pairing = yield* Effect.tryPromise(() => client.server.pair())
+    const expiration = pairing.expires_in === 365 * 24 * 60 * 60 ? "1 year" : `${Math.round(pairing.expires_in / 60)} minutes`
     const links = urls.map((url) => new URL(`/auth/connect/${pairing.code}`, url).href)
     // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
     const remote = urls.filter((url) => !isLoopback(new URL(url).hostname))
     process.stdout.write(
       [
         "",
-        `  Open a link to connect. Links work once and expire in ${Math.round(pairing.expires_in / 60)} minutes.`,
+        `  Open a link to connect. Links work once and expire in ${expiration}.`,
         "",
         ...(links.length ? links.map((link) => `  ${link}`) : ["  (no server URLs)"]),
         ...(remote.length

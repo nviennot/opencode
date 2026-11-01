@@ -27,7 +27,8 @@ export function DialogPair() {
         return {
           links: server.urls.map(link),
           localhost: local ? link(local.href) : undefined,
-          minutes: Math.round(pairing.expires_in / 60),
+          expiration:
+            pairing.expires_in === 365 * 24 * 60 * 60 ? "1 year" : `${Math.round(pairing.expires_in / 60)} minutes`,
           loopback: server.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname)),
         }
       })
@@ -44,7 +45,7 @@ export function DialogPair() {
       <box flexDirection={horizontal() ? "row" : "column"} alignItems={horizontal() ? "flex-start" : "center"} gap={2}>
         <box width={horizontal() ? 29 : "100%"} flexShrink={0} gap={1}>
           <text fg={theme.text.muted} wrapMode="word">
-            Open a link to connect. Links work once and expire in {value.minutes} minutes.
+            Open a link to connect. Links work once and expire in {value.expiration}.
           </text>
           <Show when={value.localhost}>
             {(url) => (

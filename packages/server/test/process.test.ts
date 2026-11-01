@@ -197,7 +197,7 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
     expect(fetched.headers.get("www-authenticate")).toBeNull()
 
     const browser = yield* pair
-    expect(browser.expires_in).toBe(300)
+    expect(browser.expires_in).toBe(365 * 24 * 60 * 60)
     const redirect = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
     expect(redirect.status).toBe(302)
     expect(redirect.headers.get("location")).toBe("/")
