@@ -23,6 +23,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { PatchPreview, streamingPatch } from "../../component/patch-preview"
+import { WritePreview, streamingWrite } from "../../component/write-preview"
 import { useTheme, useThemes } from "../../context/theme"
 import {
   BoxRenderable,
@@ -3163,8 +3164,11 @@ function Write(props: ToolProps) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
+  const input = createMemo(() =>
+    props.part.state.status === "streaming" ? streamingWrite(props.part.state.input) : props.input,
+  )
   const code = createMemo(() => {
-    return stringValue(props.input.content) ?? ""
+    return stringValue(input().content) ?? ""
   })
 
   return (
@@ -3184,6 +3188,17 @@ function Write(props: ToolProps) {
             />
           </line_number>
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.path) ?? ""} />
+        </BlockTool>
+      </Match>
+      <Match when={props.part.state.status === "streaming" || props.part.state.status === "running"}>
+        <BlockTool
+          path={{ label: "Writing", value: pathFormatter.format(stringValue(input().path)) }}
+          part={props.part}
+          spinner
+        >
+          <Show when={code()}>
+            <WritePreview text={code()} colors={{ text: theme.text.base, textMuted: theme.text.muted }} />
+          </Show>
         </BlockTool>
       </Match>
       <Match when={true}>
