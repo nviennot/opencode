@@ -22,6 +22,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
+import { PatchPreview, streamingPatch } from "../../component/patch-preview"
 import { useTheme, useThemes } from "../../context/theme"
 import {
   BoxRenderable,
@@ -3524,6 +3525,11 @@ function ApplyPatch(props: ToolProps) {
   const { currentSyntax: syntax } = useThemes()
   const pathFormatter = usePathFormatter()
   const files = createMemo(() => parseApplyPatchFiles(props.metadata.files))
+  const patch = createMemo(() => {
+    if (props.part.state.status === "streaming") return streamingPatch(props.part.state.input)
+    if (props.part.state.status === "running") return stringValue(props.input.patchText) ?? ""
+    return ""
+  })
   const targets = createMemo(() => {
     const patch = stringValue(props.input.patchText)
     if (!patch) return []
@@ -3632,7 +3638,19 @@ function ApplyPatch(props: ToolProps) {
           spinner={props.part.state.status === "streaming" || props.part.state.status === "running"}
           headerColor={props.part.state.status === "error" ? theme.text.feedback.error.base : undefined}
           errorColor={props.part.state.status === "error" ? theme.text.muted : undefined}
-        />
+        >
+          <Show when={patch()}>
+            <PatchPreview
+              text={patch()}
+              colors={{
+                text: theme.text.base,
+                textMuted: theme.text.muted,
+                diffAdded: theme.diff.text.added,
+                diffRemoved: theme.diff.text.removed,
+              }}
+            />
+          </Show>
+        </BlockTool>
       </Match>
     </Switch>
   )
