@@ -14,6 +14,6 @@ export function roots(app: string) {
     cache: path.join(cache!, app),
     config: path.join(config!, app),
     state: path.join(state!, app),
-    tmp: path.join(os.tmpdir(), app),
+    tmp: process.platform === "darwin" ? "/tmp/oc" : path.join(os.tmpdir(), app),
   }
 }
